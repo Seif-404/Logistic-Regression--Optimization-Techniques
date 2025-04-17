@@ -1,0 +1,154 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.datasets import make_classification
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import (confusion_matrix, accuracy_score, precision_score, recall_score, f1_score)
+
+# Sigmoid function
+def sigmoid(z):
+    return 1 / (1 + np.exp(-z))
+
+# Binary Cross-Entropy Loss
+def compute_loss(y, y_pred):
+    epsilon = 1e-9
+    return -np.mean(y * np.log(y_pred + epsilon) + (1 - y) * np.log(1 - y_pred + epsilon))
+
+# Evaluation
+def evaluate_model(y_true, y_pred):
+    print("Confusion Matrix:\n", confusion_matrix(y_true, y_pred))
+    print(f"Accuracy:  {accuracy_score(y_true, y_pred):.4f}")
+    print(f"Precision: {precision_score(y_true, y_pred):.4f}")
+    print(f"Recall:    {recall_score(y_true, y_pred):.4f}")
+    print(f"F1 Score:  {f1_score(y_true, y_pred):.4f}")
+
+class LogisticRegression:
+    def __init__(self, learning_rate=0.01, epochs=1000, batch_size=32):
+        self.lr = learning_rate
+        self.epochs = epochs
+        self.batch_size = batch_size
+        self.weights = None
+        self.bias = None
+
+    def initialize_params(self, n_features):
+        self.weights = np.zeros(n_features)
+        self.bias = 0
+
+    def predict(self, X):
+        linear_output = np.dot(X, self.weights) + self.bias
+        probs = sigmoid(linear_output)
+        return [1 if p >= 0.5 else 0 for p in probs]
+
+    # ----------- Gradient Descent -----------
+    def fit_gd(self, X, y):
+        n_samples, n_features = X.shape
+        self.initialize_params(n_features)
+        losses = []
+
+        for i in range(self.epochs):
+            predictions = sigmoid(np.dot(X, self.weights) + self.bias)
+            loss = compute_loss(y, predictions)
+            losses.append(loss)
+
+            dw = (1 / n_samples) * np.dot(X.T, (predictions - y))
+            db = (1 / n_samples) * np.sum(predictions - y)
+
+            self.weights -= self.lr * dw
+            self.bias -= self.lr * db
+
+            if i % 100 == 0:
+                print(f"[GD] Epoch {i}: Loss = {loss:.4f}")
+        return losses
+
+    # ----------- Stochastic Gradient Descent -----------
+    def fit_sgd(self, X, y):
+        n_samples, n_features = X.shape
+        self.initialize_params(n_features)
+        losses = []
+
+        for i in range(self.epochs):
+            epoch_loss = []
+
+            for j in range(n_samples):
+                xi = X[j].reshape(1, -1)
+                yi = y[j]
+
+                prediction = sigmoid(np.dot(xi, self.weights) + self.bias)
+                loss = compute_loss(yi, prediction)
+                epoch_loss.append(loss)
+
+                dw = np.dot(xi.T, (prediction - yi))
+                db = prediction - yi
+
+                self.weights -= self.lr * dw.flatten()
+                self.bias -= self.lr * db
+
+            losses.append(np.mean(epoch_loss))
+            if i % 100 == 0:
+                print(f"[SGD] Epoch {i}: Loss = {losses[-1]:.4f}")
+        return losses
+
+    # ----------- Mini-Batch Gradient Descent -----------
+    def fit_mbgd(self, X, y):
+        n_samples, n_features = X.shape
+        self.initialize_params(n_features)
+        losses = []
+
+        for i in range(self.epochs):
+            indices = np.random.permutation(n_samples)
+            X_shuffled = X[indices]
+            y_shuffled = y[indices]
+            epoch_loss = []
+
+            for start in range(0, n_samples, self.batch_size):
+                end = start + self.batch_size
+                xb = X_shuffled[start:end]
+                yb = y_shuffled[start:end]
+
+                predictions = sigmoid(np.dot(xb, self.weights) + self.bias)
+                loss = compute_loss(yb, predictions)
+                epoch_loss.append(loss)
+
+                dw = (1 / xb.shape[0]) * np.dot(xb.T, (predictions - yb))
+                db = (1 / xb.shape[0]) * np.sum(predictions - yb)
+
+                self.weights -= self.lr * dw
+                self.bias -= self.lr * db
+
+            losses.append(np.mean(epoch_loss))
+            if i % 100 == 0:
+                print(f"[Mini-Batch] Epoch {i}: Loss = {losses[-1]:.4f}")
+        return losses
+
+# Generate binary classification dataset
+X, y = make_classification(n_samples=1000, n_features=10, n_classes=2, n_informative=5, random_state=1)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+lr_model = LogisticRegression(learning_rate=0.1, epochs=1000)
+loss_gd = lr_model.fit_gd(X_train, y_train)
+y_pred_gd = lr_model.predict(X_test)
+print("\n--- Gradient Descent Evaluation ---")
+evaluate_model(y_test, y_pred_gd)
+
+lr_model = LogisticRegression(learning_rate=0.1, epochs=1000)
+loss_sgd = lr_model.fit_sgd(X_train, y_train)
+y_pred_sgd = lr_model.predict(X_test)
+print("\n--- Stochastic Gradient Descent Evaluation ---")
+evaluate_model(y_test, y_pred_sgd)
+
+lr_model = LogisticRegression(learning_rate=0.1, epochs=1000, batch_size=64)
+loss_mini = lr_model.fit_mbgd(X_train, y_train)
+y_pred_mini = lr_model.predict(X_test)
+print("\n--- Mini-Batch Gradient Descent Evaluation ---")
+evaluate_model(y_test, y_pred_mini)
+
+plt.figure(figsize=(10, 6))
+plt.plot(loss_gd, label="Gradient Descent")
+plt.plot(loss_sgd, label="Stochastic Gradient Descent")
+plt.plot(loss_mini, label="Mini-Batch Gradient Descent")
+plt.title("Loss Comparison Across Optimizers")
+plt.xlabel("Epochs")
+plt.ylabel("Loss")
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.show()
